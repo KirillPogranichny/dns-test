@@ -2,12 +2,31 @@ import psycopg2
 import psycopg2.extras as extras
 import pandas as pd
 
+
 db_params = {
     'host': 'localhost',
     'dbname': 'dns',
     'user': 'postgres',
     'password': '89242604125.Cc'
 }
+
+
+def dtype_mapping(column_data):
+    # Map pandas data types to PostgreSQL data types
+    mapping = {
+        pd.api.types.is_bool_dtype: 'boolean',
+        pd.api.types.is_integer_dtype: 'integer',
+        pd.api.types.is_float_dtype: 'numeric',
+        pd.api.types.is_string_dtype: f'varchar({column_data.astype(str).apply(len).max()})',
+        lambda x: isinstance(x, pd.CategoricalDtype): f'varchar({column_data.astype(str).apply(len).max()})',
+        pd.api.types.is_datetime64_dtype: 'timestamp without time zone'
+    }
+
+    for is_type, pg_type in mapping.items():
+        if is_type(column_data):
+            return pg_type
+
+    return 'text'
 
 
 def execute_values(conn, df, table):
@@ -30,28 +49,14 @@ def execute_values(conn, df, table):
     cursor.close()
 
 
-def dtype_mapping(column_data):
-    # Map pandas data types to PostgreSQL data types
-    mapping = {
-        pd.api.types.is_bool_dtype: 'boolean',
-        pd.api.types.is_integer_dtype: 'integer',
-        pd.api.types.is_float_dtype: 'numeric',
-        pd.api.types.is_string_dtype: f'varchar({column_data.astype(str).apply(len).max()})',
-        pd.api.types.is_categorical_dtype: f'varchar({column_data.astype(str).apply(len).max()})',
-        # pd.api.types.is_datetime64_any_dtype: 'timestamp without time zone'
-    }
-
-    for is_type, pg_type in mapping.items():
-        if is_type(column_data):
-            return pg_type
-
-    return 'text'
-
-
 def create_table_from_csv(conn, csv_file, table_name):
     # Load data into the table
     data = pd.read_csv(csv_file)
     data = data.drop('Unnamed: 0', axis=1)
+
+    for col in data.columns:
+        if data[col].dtype == 'object' and data[col].str.match(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$').all():
+            data[col] = pd.to_datetime(data[col], format='%Y-%m-%d %H:%M:%S', errors='coerce')
 
     # Check if table exists
     cursor = conn.cursor()
