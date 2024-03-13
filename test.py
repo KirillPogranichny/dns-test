@@ -30,25 +30,28 @@ def execute_values(conn, df, table):
     cursor.close()
 
 
-def dtype_mapping(data):
+def dtype_mapping(column_data):
     # Map pandas data types to PostgreSQL data types
     mapping = {
-        'int64': 'integer',
-        'float64': 'numeric',
-        # 'bool': 'boolean',
-        # 'datetime64[ns]': 'timestamp',  # TIMESTAMP
-        # 'category': f'varchar({data.astype(str).apply(lambda x: x.str.len()).max().max()})',
-        'object': 'text'
+        pd.api.types.is_bool_dtype: 'boolean',
+        pd.api.types.is_integer_dtype: 'integer',
+        pd.api.types.is_float_dtype: 'numeric',
+        pd.api.types.is_string_dtype: f'varchar({column_data.astype(str).apply(len).max()})',
+        pd.api.types.is_categorical_dtype: f'varchar({column_data.astype(str).apply(len).max()})',
+        # pd.api.types.is_datetime64_any_dtype: 'timestamp without time zone'
     }
-    return [mapping[str(dt)] for dt in data.dtypes]
+
+    for is_type, pg_type in mapping.items():
+        if is_type(column_data):
+            return pg_type
+
+    return 'text'
 
 
 def create_table_from_csv(conn, csv_file, table_name):
     # Load data into the table
     data = pd.read_csv(csv_file)
     data = data.drop('Unnamed: 0', axis=1)
-
-    data_types = dtype_mapping(data)
 
     # Check if table exists
     cursor = conn.cursor()
@@ -58,7 +61,7 @@ def create_table_from_csv(conn, csv_file, table_name):
 
     # If table does not exist, create it
     if not table_exists:
-        columns = ','.join([f'{col} {data_type}' for col, data_type in zip(data.columns, data_types)])
+        columns = ','.join([f'{col} {dtype_mapping(data[col])}' for col in data.columns])
         create_table_sql = f"CREATE TABLE {table_name} ({columns})"
         cursor = conn.cursor()
         cursor.execute(create_table_sql)
