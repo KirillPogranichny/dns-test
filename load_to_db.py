@@ -3,11 +3,13 @@ import psycopg2.extras as extras
 import pandas as pd
 
 
+# Data for connecting to DB
 db_params = {
-    'host': 'localhost',
-    'dbname': 'dns',
+    'database': 'postgres',
     'user': 'postgres',
-    'password': '89242604125.Cc'
+    'password': 'admin',
+    'host': '127.0.0.1',
+    'port': '5432'
 }
 
 
@@ -45,7 +47,7 @@ def execute_values(conn, df, table):
         conn.rollback()
         cursor.close()
         return 1
-    print("execute_values() done")
+    print(f'Data has been inserted into {table}')
     cursor.close()
 
 
